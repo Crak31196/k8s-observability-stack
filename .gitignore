@@ -1,0 +1,22 @@
+# Environment secrets - never commit real .env, only .env.example
+.env
+
+# Bind-mounted Prometheus/Grafana data (this repo uses named Docker
+# volumes by default, but ignore local data dirs in case anyone switches
+# to bind mounts for local debugging)
+prometheus-data/
+grafana-data/
+alertmanager-data/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor junk
+.vscode/
+.idea/
+*.swp
+*~
+
+# Logs
+*.log
