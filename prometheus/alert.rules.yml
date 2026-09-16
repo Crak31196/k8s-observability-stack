@@ -1,0 +1,83 @@
+# Realistic SLA-style alert rules for a production Kubernetes-style service.
+# These mirror the kind of alert handling / SLA maintenance / RCA workflow
+# used to keep on-call rotations informed with actionable, low-noise alerts.
+#
+# NOTE: These are demo/template rules tuned for the bundled demo-app and
+# node-exporter. Thresholds should be tuned per-service in a real deployment.
+
+groups:
+  - name: sla-alerts
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Target {{ $labels.job }} ({{ $labels.instance }}) is down"
+          description: >-
+            Prometheus has failed to scrape {{ $labels.instance }} (job
+            {{ $labels.job }}) for at least 1 minute. This usually means the
+            process crashed, is unreachable, or is failing health checks.
+          runbook: "runbooks/target-down.md"
+
+      - alert: HighErrorRate
+        expr: >-
+          (
+            sum by (job) (rate(http_requests_total{code=~"5.."}[5m]))
+            /
+            sum by (job) (rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High 5xx error rate on {{ $labels.job }}"
+          description: >-
+            More than 5% of requests to {{ $labels.job }} have returned a
+            5xx status code over the last 5 minutes. This breaches the
+            99.5% availability SLA target.
+          runbook: "runbooks/high-error-rate.md"
+
+      - alert: HighRequestLatency
+        expr: >-
+          histogram_quantile(
+            0.95,
+            sum by (job, le) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency on {{ $labels.job }} exceeds 1s"
+          description: >-
+            The 95th percentile request latency for {{ $labels.job }} has
+            been above 1 second for 5 minutes, which breaches the
+            latency SLO for user-facing requests.
+          runbook: "runbooks/high-error-rate.md"
+
+      - alert: InstanceRestartLoop
+        expr: changes(process_start_time_seconds[15m]) > 2
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} on {{ $labels.instance }} is restart-looping"
+          description: >-
+            {{ $labels.instance }} has restarted more than twice in the
+            last 15 minutes (process_start_time_seconds changed). This is
+            consistent with a CrashLoopBackOff in Kubernetes and should be
+            investigated before it burns the availability SLA.
+          runbook: "runbooks/target-down.md"
+
+      - alert: PrometheusTargetMissing
+        expr: absent(up{job="demo-app"}) == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "demo-app scrape target has disappeared"
+          description: >-
+            Prometheus can no longer find the demo-app target at all
+            (not even as down). Check service discovery / network config.
+          runbook: "runbooks/target-down.md"
