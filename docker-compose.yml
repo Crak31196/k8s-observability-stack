@@ -23,7 +23,7 @@ volumes:
 
 services:
   demo-app:
-    image: brancz/prometheus-example-app:v0.5.0
+    image: quay.io/brancz/prometheus-example-app:v0.5.0
     container_name: demo-app
     restart: unless-stopped
     ports:
@@ -44,7 +44,7 @@ services:
     command:
       - "--path.rootfs=/host"
     volumes:
-      - /:/host:ro,rslave
+      - /:/host:ro
     ports:
       - "${NODE_EXPORTER_PORT:-9100}:9100"
     networks:
