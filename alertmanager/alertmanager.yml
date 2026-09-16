@@ -1,0 +1,55 @@
+# Alertmanager routing configuration.
+#
+# This is demo/template configuration. It intentionally uses a placeholder
+# HTTP webhook receiver instead of a real Slack/PagerDuty integration, so
+# that no real tokens or webhook URLs are ever committed to source control.
+#
+# To wire in a real receiver for a client engagement:
+#   1. Replace the `webhook_configs.url` below with the real endpoint, OR
+#   2. Better: template it from an environment variable at deploy time,
+#      e.g. with envsubst before mounting the file:
+#        ALERTMANAGER_WEBHOOK_URL="https://hooks.slack.com/services/XXX" \
+#          envsubst < alertmanager.yml.tpl > alertmanager.yml
+#   3. For Slack, swap `webhook_configs` for a `slack_configs` block with
+#      `api_url: '${SLACK_WEBHOOK_URL}'`.
+#   4. For PagerDuty, add a `pagerduty_configs` block with
+#      `routing_key: '${PAGERDUTY_ROUTING_KEY}'`.
+# Never commit real webhook URLs, routing keys, or tokens to this file.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: "default-webhook"
+  group_by: ["severity", "alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity="critical"
+      receiver: "critical-webhook"
+      repeat_interval: 1h
+    - matchers:
+        - severity="warning"
+      receiver: "default-webhook"
+
+receivers:
+  - name: "default-webhook"
+    webhook_configs:
+      # Placeholder receiver only - no real endpoint. Swap for a real
+      # Slack/PagerDuty/webhook URL as described above before production use.
+      - url: "http://127.0.0.1:5001/"
+        send_resolved: true
+
+  - name: "critical-webhook"
+    webhook_configs:
+      - url: "http://127.0.0.1:5001/"
+        send_resolved: true
+
+inhibit_rules:
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ["alertname", "instance"]
