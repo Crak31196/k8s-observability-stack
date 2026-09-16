@@ -1,0 +1,104 @@
+# Example Kubernetes CronJob wiring for scripts/remediate-restart-loop.sh.
+#
+# This is a TEMPLATE/DEMO manifest. It shows how the same
+# check-health-and-remediate pattern used in a cron job on a VM would be
+# deployed as a native Kubernetes CronJob - a common pattern for automated
+# maintenance tasks (health checks, cleanup jobs, cert renewal checks,
+# stale-resource pruning, etc.) that keep production services reliable
+# without manual intervention.
+#
+# Apply with: kubectl apply -f k8s-cronjob-example.yaml
+#
+# In a real cluster you would typically:
+#   - Bake this script into a small maintenance image (or mount it via a
+#     ConfigMap, as done here for demo purposes).
+#   - Replace RESTART_CMD with `kubectl rollout restart deployment/<name>`
+#     (requires a ServiceAccount with the appropriate RBAC role, see below).
+#   - Set NOTIFY_WEBHOOK_URL from a Secret, never hardcoded.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: remediate-restart-loop-script
+  namespace: observability
+data:
+  remediate-restart-loop.sh: |
+    # In production, mount the real script from scripts/remediate-restart-loop.sh
+    # (kept as a separate file here only so this manifest is self-contained).
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "See scripts/remediate-restart-loop.sh in the repo for the full script."
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: remediate-restart-loop
+  namespace: observability
+spec:
+  # Every 5 minutes - mirrors the crontab example in the script's header.
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: remediation-bot
+          restartPolicy: Never
+          containers:
+            - name: remediate-restart-loop
+              image: bitnami/kubectl:1.30
+              command: ["/bin/bash", "/scripts/remediate-restart-loop.sh"]
+              env:
+                - name: HEALTH_URL
+                  value: "http://demo-app.observability.svc.cluster.local:8080/metrics"
+                - name: RESTART_CMD
+                  value: "kubectl rollout restart deployment/demo-app -n observability"
+                - name: NOTIFY_WEBHOOK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: alerting-secrets
+                      key: notify-webhook-url
+                      optional: true
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+          volumes:
+            - name: script
+              configMap:
+                name: remediate-restart-loop-script
+                defaultMode: 0755
+---
+# Minimal RBAC so the CronJob's ServiceAccount can restart the target
+# deployment. Scope this down further (resourceNames) in a real cluster.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: remediation-bot
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: remediation-bot-role
+  namespace: observability
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: remediation-bot-binding
+  namespace: observability
+subjects:
+  - kind: ServiceAccount
+    name: remediation-bot
+    namespace: observability
+roleRef:
+  kind: Role
+  name: remediation-bot-role
+  apiGroup: rbac.authorization.k8s.io
