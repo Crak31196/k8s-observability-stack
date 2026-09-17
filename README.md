@@ -113,7 +113,7 @@ This is also run automatically in CI on every push/PR (see `.github/workflows/ci
 
 This Docker Compose stack is intended for **local development and client demos** - it proves the monitoring/alerting/dashboarding pattern works end-to-end. For a **real production Kubernetes deployment**, the standard, battle-tested path is the [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart, which deploys Prometheus, Alertmanager, Grafana, and the Prometheus Operator (with CRDs for `ServiceMonitor`/`PrometheusRule`) directly into your cluster. The alert rules, dashboard JSON, and runbooks in this repo translate directly into `PrometheusRule` and Grafana dashboard ConfigMaps in that setup.
 
-## What I'd Build Next For a Client
+## What I'd Build Next
 
 - **Long-term metrics storage**: Thanos or Grafana Mimir for multi-cluster, long-retention queries beyond Prometheus's local TSDB.
 - **Real alert routing**: wire Alertmanager's placeholder webhook to a real Slack channel and/or PagerDuty routing key (via `.env`/Secrets, never hardcoded).
